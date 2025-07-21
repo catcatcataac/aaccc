@@ -1,6 +1,6 @@
 {
     "version": "v1.0.4.2-release",
     "versionCode": 1042,
-    "zipUrl": "https://example.com/your-module-v1.1.zip",
+    "zipUrl": "https://raw.githubusercontent.com/catcatcataac/aaccc/main/HashIntegrityRescue.zip",
     "changelog": "提供云更新支持"
 }
