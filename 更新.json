@@ -1,6 +1,6 @@
 {
-    "version": "",
-    "versionCode": 1,
+    "version": "v1.0.4.2-release",
+    "versionCode": 1042,
     "zipUrl": "https://example.com/your-module-v1.1.zip",
-    "changelog": "修复了一些小问题，提升了性能"
+    "changelog": "提供云更新支持"
 }
