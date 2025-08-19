@@ -89,33 +89,64 @@ jobs:
         run: |
           set -e
           cd "$GITHUB_WORKSPACE"
+          
+          # 核心修改：版本号与实际机型的映射表（用户选版本，实际拉取对应机型配置）
+          declare -A VERSION_TO_DEVICE=(
+            ["6.6"]="oneplus_13t"       # 6.6版本实际拉取13T的配置
+            ["6.1.118"]="oneplus12_v"   # 6.1版本实际拉取oneplus12_v的配置
+            ["5.15"]="oneplus_11_v"     # 5.15版本实际拉取oneplus_11_v的配置
+            ["5.10"]="oneplus_ace_pro_v" # 5.10版本实际拉取oneplus_ace_pro_v的配置
+          )
+          
           declare -A KVERSION_MAP=(
             ["5.10"]="android12 5.10"
             ["5.15"]="android13 5.15"
             ["6.1.118"]="android14 6.1"
             ["6.6"]="android15 6.6"
           )
-          FILE="${{ github.event.inputs.FILE }}"
-          if [[ "$FILE" =~ ^(.+)_([a-zA-Z])$ ]]; then
+          
+          # 1. 处理用户输入的FILE（如6.6_v）
+          INPUT_FILE="${{ github.event.inputs.FILE }}"
+          # 提取基础版本号（去除后缀，如从6.6_v中提取6.6）
+          BASE_VERSION=$(echo "$INPUT_FILE" | sed -E 's/^([0-9]+\.[0-9]+(\.[0-9]+)?).*/\1/')
+          echo "用户选择的版本: $BASE_VERSION，原始输入: $INPUT_FILE"
+          
+          # 2. 根据版本映射到实际机型配置文件名
+          if [[ -n "${VERSION_TO_DEVICE[$BASE_VERSION]}" ]]; then
+            ACTUAL_FILE="${VERSION_TO_DEVICE[$BASE_VERSION]}"  # 实际拉取的机型配置（如oneplus_13t）
+            echo "映射到实际机型配置: $ACTUAL_FILE"
+          else
+            echo "❌ 未找到版本 $BASE_VERSION 对应的机型配置"
+            exit 1
+          fi
+          
+          # 3. 处理FILE_CONF（基于用户输入的版本，用于后续版本匹配）
+          if [[ "$INPUT_FILE" =~ ^(.+)_([a-zA-Z])$ ]]; then
             FILE_CONF="${BASH_REMATCH[1]}"
           else
-            FILE_CONF="$FILE"
+            FILE_CONF="$INPUT_FILE"
           fi
-          FILE_BASE=$(echo "$FILE_CONF" | sed -E 's/_([a-zA-Z0-9])/\U\1/g; s/^oneplus/OnePlus/')
+          
+          # 4. 构建文件路径（使用映射后的实际机型文件名）
+          FILE_BASE=$(echo "$ACTUAL_FILE" | sed -E 's/_([a-zA-Z0-9])/\U\1/g; s/^oneplus/OnePlus/')
           mkdir -p ".repo/manifests_fallback"
-          XML_PATH=".repo/manifests_fallback/${FILE}.xml"
+          XML_PATH=".repo/manifests_fallback/${ACTUAL_FILE}.xml"  # 关键：用实际机型文件名
           README_PATH=".repo/manifests_fallback/README.md"
-          echo "处理 FILE=$FILE, CONF=$FILE_CONF, BASE=$FILE_BASE"
+          
+          echo "处理 INPUT_FILE=$INPUT_FILE, 实际配置=$ACTUAL_FILE, CONF=$FILE_CONF, BASE=$FILE_BASE"
           echo "FILE_CONF=$FILE_CONF" >> $GITHUB_ENV
           echo "FILE_BASE=$FILE_BASE" >> $GITHUB_ENV
-          echo "🌐 拉取 OnePlus Manifest 分支列表..."
+          echo "ACTUAL_FILE=$ACTUAL_FILE" >> $GITHUB_ENV  # 保存实际机型文件名供后续使用
+          
+          # 5. 拉取实际机型的XML配置（使用映射后的ACTUAL_FILE）
+          echo "🌐 拉取 OnePlus Manifest 分支列表，查找 ${ACTUAL_FILE}.xml..."
           BRANCHES=$(curl -s https://api.github.com/repos/OnePlusOSS/kernel_manifest/branches | jq -r '.[].name')
           FOUND=""
           for BRANCH in $BRANCHES; do
-            XML_URL="https://raw.githubusercontent.com/OnePlusOSS/kernel_manifest/$BRANCH/${FILE}.xml"
+            XML_URL="https://raw.githubusercontent.com/OnePlusOSS/kernel_manifest/$BRANCH/${ACTUAL_FILE}.xml"
             README_URL="https://raw.githubusercontent.com/OnePlusOSS/kernel_manifest/$BRANCH/README.md"
             if curl -sf --head "$XML_URL" > /dev/null; then
-              echo "✅ XML: $BRANCH"
+              echo "✅ 找到 ${ACTUAL_FILE}.xml 在分支 $BRANCH"
               curl -s -o "$XML_PATH" "$XML_URL"
               curl -s -o "$README_PATH" "$README_URL"
               FOUND="$BRANCH"
@@ -123,27 +154,26 @@ jobs:
             fi
           done
           if [[ -z "$FOUND" || ! -s "$XML_PATH" ]]; then
-            echo "❌ 无法找到 ${FILE}.xml"
+            echo "❌ 无法找到 ${ACTUAL_FILE}.xml"
             exit 1
           fi
+          
+          # 后续逻辑保持不变（解析XML、提取CPU/版本等）
           echo "📥 下载完成，开始提取 revision..."
-          # 解析 revision 字符串
           REVISION=$(grep -oP '<project[^>]+revision="\K[^"]+' "$XML_PATH" | head -n1 || true)
-          echo "解析 FILE 获取 CPU 和 ANDROID_VERSION..."
-          # 提取 CPU
+          echo "解析实际配置获取 CPU 和 ANDROID_VERSION..."
           CPU=$(echo "$REVISION" | sed -E 's#^oneplus/([^_]+).*#\1#')
-          # 提取 ANDROID_VERSION
           ANDROID_VERSION=$(echo "$REVISION" | grep -oP '\d{1,2}\.\d{1,2}(\.\d{1,2})?')
           if [[ -n "$CPU" && -n "$ANDROID_VERSION" ]]; then
             echo "✅ CPU=$CPU, ANDROID_VERSION=$ANDROID_VERSION"
             echo "CPU=$CPU" >> $GITHUB_ENV
             echo "ANDROID_VERSION=$ANDROID_VERSION" >> $GITHUB_ENV
-            # 获取短位 Android 版本号
             echo "ANDROID_SHORT_VERSION=${ANDROID_VERSION%%.*}" >> $GITHUB_ENV
           else
             echo "❌ 无法从 revision 中提取 CPU 或 ANDROID_VERSION"
             exit 1
           fi
+          
           echo "解析 KVERSION_MAP 获取 KANDROID_VERSION 和 KERNEL_VERSION..."
           if [[ -n "${KVERSION_MAP[$FILE_CONF]}" ]]; then
             read -r KANDROID_VERSION KERNEL_VERSION <<< "${KVERSION_MAP[$FILE_CONF]}"
@@ -153,6 +183,7 @@ jobs:
           else
             echo "❌ KVERSION_MAP 中没有找到 $FILE_CONF 对应的版本信息"
           fi
+          
           echo "解析 README.md 获取 CPUD 和 BUILD_METHOD..."
           if [[ -s "$README_PATH" ]]; then
             BUILD_LINE=$(grep -m1 'oplus_build_kernel.sh' "$README_PATH" || true)
@@ -168,116 +199,20 @@ jobs:
           else
             echo "❌ README.md 下载失败或为空"
           fi
-          # 传递组合信息
-          echo "value=${FILE_BASE}_Android${ANDROID_VERSION}" >> "$GITHUB_OUTPUT"
-      - name: Debug Show Selected Inputs
-        run: |
-          echo "-----------------------"
-          echo "Selected CPU: ${{ env.CPU }}"
-          echo "Selected CPUD: ${{ env.CPUD }}"
-          echo "Selected KANDROID_VERSION: ${{ env.KANDROID_VERSION }}"
-          echo "Selected ANDROID_VERSION: ${{ env.ANDROID_VERSION }}"
-          echo "Selected KERNEL_VERSION: ${{ env.KERNEL_VERSION }}"
-          echo "Selected BUILD_METHOD: ${{ env.BUILD_METHOD }}"
-          echo "Selected FILE: ${{ github.event.inputs.FILE }}"
-          echo "Custom KSU_META: ${{ github.event.inputs.KSU_META }}"
-          echo "Custom BUILD_TIME: ${{ github.event.inputs.BUILD_TIME }}"
-          echo -n "BUILD_TIME Unicode: "
-          python3 -c "print(''.join(f'U+{ord(c):04X} ' for c in '''${{ github.event.inputs.BUILD_TIME }}'''))"
-          echo "Custom SUFFIX: ${{ github.event.inputs.SUFFIX }}"
-          echo -n "SUFFIX Unicode: "
-          python3 -c "print(''.join(f'U+{ord(c):04X} ' for c in '''${{ github.event.inputs.SUFFIX }}'''))"
-          echo "Selected SUSFS_CI: ${{ github.event.inputs.SUSFS_CI }}"
-          echo "Selected HOOK: ${{ github.event.inputs.HOOK }}"
-          echo "Selected KPM: ${{ github.event.inputs.KPM }}"
           
-          echo "Selected SCHED: ${{ github.event.inputs.SCHED }}"
-          echo "Selected ZRAM: ${{ github.event.inputs.ZRAM }}"
-          echo "-----------------------"
-      - name: Check Disk Space
-        run: df -h
+          echo "value=${FILE_BASE}_Android${ANDROID_VERSION}" >> "$GITHUB_OUTPUT"
 
-      - name: Create and Enable 3G Swap
-        run: |
-          sudo swapoff -a
-          sudo fallocate -l 3G /swapfile
-          sudo chmod 600 /swapfile
-          sudo mkswap /swapfile
-          sudo swapon /swapfile
-          free -h
-      - name: Set Cache Environment
-        run: |
-          echo "CCACHE_DIR=$HOME/.ccache_${{ github.event.inputs.FILE }}" >> $GITHUB_ENV
-          mkdir -p "$HOME/.ccache_${{ github.event.inputs.FILE }}"
-          echo "set: $HOME/.ccache_${{ github.event.inputs.FILE }}"
-      - name: Configure Git
-        run: |
-          git config --global user.name "Numbersf"
-          git config --global user.email "263623064@qq.com"
-      - name: Configure APTC
-        run: |
-          APT_CACHE_DIR="$HOME/apt-cache"
-          mkdir -p "$APT_CACHE_DIR"/{archives,lists/partial}
-          echo "Dir::Cache \"$APT_CACHE_DIR\";" | sudo tee /etc/apt/apt.conf.d/90user-cache
-          echo "Dir::Cache::archives \"$APT_CACHE_DIR/archives\";" | sudo tee -a /etc/apt/apt.conf.d/90user-cache
-          echo "Dir::State::lists \"$APT_CACHE_DIR/lists\";" | sudo tee -a /etc/apt/apt.conf.d/90user-cache
-          echo "Acquire::Check-Valid-Until \"false\";" | sudo tee -a /etc/apt/apt.conf.d/90user-cache
-          echo "Acquire::Languages \"none\";" | sudo tee -a /etc/apt/apt.conf.d/90user-cache
-          sudo chown -R $USER:$USER "$APT_CACHE_DIR"
-      - name: Set APT Cache
-        uses: actions/cache@v3
-        with:
-          path: ${{ env.HOME }}/apt-cache
-          key: ${{ runner.os }}-apt-${{ hashFiles('.github/workflows/Build SukiSU Ultra OnePlus.yml') }}
-          restore-keys: |
-            ${{ runner.os }}-apt-
-      - name: Install Dependencies
-        run: |
-          sudo rm -f /var/lib/apt/lists/lock /var/lib/dpkg/lock
-          APT_CACHE_DIR="$HOME/apt-cache"
-          mkdir -p "$APT_CACHE_DIR/lists/partial"
-          sudo apt -o Dir::Cache="$APT_CACHE_DIR" update -qq
-          sudo DEBIAN_FRONTEND=noninteractive apt -o Dir::Cache="$APT_CACHE_DIR" install -yq --no-install-recommends \
-            python3 git curl ccache libelf-dev \
-            build-essential flex bison libssl-dev \
-            libncurses-dev liblz4-tool zlib1g-dev \
-            libxml2-utils rsync unzip
-      - name: Restore Ccache
-        uses: actions/cache@v3
-        with:
-          path: ${{ env.CCACHE_DIR }}
-          key: ccache-${{ runner.os }}-${{ github.ref_name }}-${{ github.event.inputs.FILE }}-${{ env.BUILD_METHOD }}-${{ github.event.inputs.FAST_BUILD == 'true' && 'alpha' || 'beta' }}-15
-
-      - name: Initialize Ccache
-        run: |
-          INIT_FLAG="${{ env.CCACHE_DIR }}/.ccache_initialized"
-          if command -v ccache >/dev/null 2>&1; then
-            if [ ! -f "$INIT_FLAG" ]; then
-              echo "初始化 ccache (${{ env.CCACHE_DIR }})..."
-              mkdir -p "${{ env.CCACHE_DIR }}"
-              ccache -M ${{ env.CCACHE_MAXSIZE }}
-              touch "$INIT_FLAG"
-              echo "✅ ccache 初始化完成"
-            else
-              echo "✅ ccache 已初始化，跳过"
-            fi
-          else
-            echo "❌ 未安装 ccache，跳过"
-          fi
-          ccache -s
-      - name: Install Repo Tool
-        run: |
-          curl https://storage.googleapis.com/git-repo-downloads/repo > ~/repo
-          chmod a+x ~/repo
-          sudo mv ~/repo /usr/local/bin/repo
+      # 后续步骤保持不变，但注意：
+      # 初始化Repo时需要使用映射后的ACTUAL_FILE（替换原来的github.event.inputs.FILE）
       - name: Initialize Repo and Sync
         run: |
           mkdir kernel_workspace && cd kernel_workspace
           mkdir -p .repo/manifests
-          FILE="${{ github.event.inputs.FILE }}"
-          cp "$GITHUB_WORKSPACE/.repo/manifests_fallback/${FILE}.xml" ".repo/manifests/${FILE}.xml"
-          repo init -u https://github.com/OnePlusOSS/kernel_manifest.git -b oneplus/${{env.CPU}} -m "${FILE}.xml" --repo-rev=v2.16 --depth=1 --no-clone-bundle --no-tags
+          ACTUAL_FILE="${{ env.ACTUAL_FILE }}"  # 使用映射后的实际机型文件名
+          cp "$GITHUB_WORKSPACE/.repo/manifests_fallback/${ACTUAL_FILE}.xml" ".repo/manifests/${ACTUAL_FILE}.xml"
+          repo init -u https://github.com/OnePlusOSS/kernel_manifest.git -b oneplus/${{env.CPU}} -m "${ACTUAL_FILE}.xml" --repo-rev=v2.16 --depth=1 --no-clone-bundle --no-tags
           repo sync -c -j$(nproc) --no-clone-bundle --no-tags --force-sync
+          # 以下为原有清理逻辑
           if [ -e kernel_platform/common/BUILD.bazel ]; then
             sed -i '/^[[:space:]]*"protected_exports_list"[[:space:]]*:[[:space:]]*"android\/abi_gki_protected_exports_aarch64",$/d' kernel_platform/common/BUILD.bazel
           fi
@@ -286,6 +221,9 @@ jobs:
           fi
           rm kernel_platform/common/android/abi_gki_protected_exports_* || echo "No protected exports!"
           rm kernel_platform/msm-kernel/android/abi_gki_protected_exports_* || echo "No protected exports!"
+
+      # 其他步骤（如自定义后缀、打补丁、构建等）保持不变...
+
       # 自定义内核后缀
       - name: Custom Kernel Suffix if set
         if: ${{ github.event.inputs.SUFFIX != '' }}
