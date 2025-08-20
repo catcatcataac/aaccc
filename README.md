@@ -1,6 +1,6 @@
 # 只是一个一加的SukiSU内核编译仓库而已
-自行fork并action编译内核/
-推荐普通人的配置:
+自行fork并action编译内核\
+推荐普通人的配置:\
 内核版本选择:自行查询自己手机的内核版本号
 HOOK类型:Manual
 SUSFS模块下载方式:CI
