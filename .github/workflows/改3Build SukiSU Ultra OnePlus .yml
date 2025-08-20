@@ -1,4 +1,4 @@
-name: 构建一加_SukiSU Ultra内核
+name: 构建SukiSU_Ultra OKI内核
 on:
   workflow_dispatch:
     inputs:
@@ -14,14 +14,14 @@ on:
           - 5.10
       HOOK:
         type: choice
-        description: "钩子选择"
+        description: "HOOK类型"
         required: true
         default: manual
         options:
           - kprobe
           - manual
           - tracepoint
-      SUSFS_CI:
+      SUSFS_SS:
         type: choice
         description: "SUSFS模块下载方式"
         required: true
@@ -47,7 +47,7 @@ on:
         default: ""
       FAST_BUILD:
         type: boolean
-        description: "是否启用极速构建？"
+        description: "是否启用加速编译？"
         required: true
         default: true
       KPM:
@@ -57,7 +57,7 @@ on:
         default: true
       SCHED:
         type: boolean
-        description: "是否添加风驰驱动？"
+        description: "是否添加风驰内核补丁？"
         required: true
         default: false
       ZRAM:
@@ -227,11 +227,11 @@ jobs:
           echo "自定义后缀: ${{ github.event.inputs.SUFFIX }}"
           echo -n "SUFFIX Unicode: "
           python3 -c "print(''.join(f'U+{ord(c):04X} ' for c in '''${{ github.event.inputs.SUFFIX }}'''))"
-          echo "SUSFS下载方式: ${{ github.event.inputs.SUSFS_CI }}"
+          echo "SUSFS下载方式: ${{ github.event.inputs.SUSFS_SS }}"
           echo "钩子类型: ${{ github.event.inputs.HOOK }}"
           echo "KPM: ${{ github.event.inputs.KPM }}"
-          echo "极速构建: ${{ github.event.inputs.FAST_BUILD }}"
-          echo "风驰驱动: ${{ github.event.inputs.SCHED }}"
+          echo "加速编译: ${{ github.event.inputs.FAST_BUILD }}"
+          echo "风驰内核补丁: ${{ github.event.inputs.SCHED }}"
           echo "ZRAM算法: ${{ github.event.inputs.ZRAM }}"
           echo "-----------------------"
 
@@ -255,8 +255,8 @@ jobs:
 
       - name: 配置Git
         run: |
-          git config --global user.name "Numbersf"
-          git config --global user.email "263623064@qq.com"
+          git config --global user.name "catcatcataac"
+          git config --global user.email "ax3526435@gmail.com"
 
       - name: 配置APT缓存
         run: |
@@ -371,7 +371,7 @@ jobs:
             elif grep -q 'echo "\$res"' "$path"; then
               echo "检测到旧版setlocalversion格式"
               if [ "$FAST_BUILD" = "true" ]; then
-                echo "启用极速构建: 使用静态版本"
+                echo "启用加速编译: 使用静态版本"
                 sed -i "s/^res=.*/res=\"-${KANDROID_VERSION}-${SUFFIX}\"/" "$path"
               else
                 echo "标准构建: 插入后缀"
@@ -427,7 +427,7 @@ jobs:
             elif grep -q 'echo "\$res"' "$path"; then
               echo "检测到旧版setlocalversion格式"
               if [ "$FAST_BUILD" = "true" ]; then
-                echo "启用极速构建: 使用带随机后缀的静态版本"
+                echo "启用加速编译: 使用带随机后缀的静态版本"
                 sed -i "s/^res=.*/res=\"-${KANDROID_VERSION}-${RANDOM_SUFFIX}\"/" "$path"
               else
                 echo "标准构建: 插入随机后缀"
@@ -543,9 +543,9 @@ jobs:
           # 修复5.15旧版本C库兼容问题
           if [ "$GKI_V" == "android13-5.15" ] && [ "$SUBLEVEL" -lt 123 ]; then
             echo "修复5.15.0-5.15.123的旧版C库bug"
-            curl -Lo fix_5.15.legacy.patch --retry 5 --retry-delay 2 --retry-connrefused https://raw.githubusercontent.com/Numbersf/Action-Build/SukiSU-Ultra/patches/fix_5.15.legacy
-            patch -p1 < fix_5.15.legacy.patch
-            echo "fix_5.15_patch完成"
+            curl -Lo fix5.15Short.patch --retry 5 --retry-delay 2 --retry-connrefused https://raw.githubusercontent.com/catcatcataac/aaccc/main/fix/fix5.15Short
+            patch -p1 < fix5.15Short.patch
+            echo "修复5.15完成"
           fi
           KERNEL_VERSION="${{ env.KERNEL_VERSION }}"
           file="${{ env.FILE }}"
@@ -582,9 +582,9 @@ jobs:
         run: |
           cd kernel_workspace/kernel_platform/common
           sed -i '1iobj-y += hmbird_patch.o' drivers/Makefile
-          wget https://github.com/Numbersf/Action-Build/raw/SukiSU-Ultra/patches/hmbird_patch.patch
+          wget https://github.com/catcatcataac/aaccc/raw/main/fix/flyfengchi.patch
           echo "应用OGKI转GKI补丁"
-          patch -p1 -F 3 < hmbird_patch.patch
+          patch -p1 -F 3 < flyfengchi.patch
           echo "OGKI转换GKI_patch完成"
 
       - name: 应用钩子配置
@@ -767,8 +767,8 @@ jobs:
           # 移除构建审查
           sed -i 's/check_defconfig//' ./common/build.config.gki
 
-      # 添加风驰驱动（主要适用于sm8750）
-      - name: 添加sched_ext（风驰驱动）
+      # 添加风驰内核补丁（只适用于sm8750）
+      - name: 添加sched_ext（添加风驰内核补丁）
         if: ${{ github.event.inputs.SCHED == 'true' }}
         run: |
           cd kernel_workspace/kernel_platform/
@@ -806,7 +806,7 @@ jobs:
             fi
           done
 
-      - name: 启用thin LTO（极速构建）
+      - name: 启用thin LTO（加速编译）
         if: ${{ (env.KERNEL_VERSION == '5.10' || env.KERNEL_VERSION == '5.15') && github.event.inputs.FAST_BUILD == 'true' }}
         run: |
           cd kernel_workspace/kernel_platform
@@ -817,7 +817,7 @@ jobs:
           sed -i 's/^CONFIG_LTO_CLANG_NONE=y/CONFIG_LTO_CLANG_THIN=y/' "$DEFCONFIG"
           grep -q '^CONFIG_LTO_CLANG_THIN=y' "$DEFCONFIG" || echo 'CONFIG_LTO_CLANG_THIN=y' >> "$DEFCONFIG"
 
-      - name: 极速构建内核
+      - name: 加速编译内核
         if: ${{ github.event.inputs.FAST_BUILD == 'true' }}
         id: fast_build
         run: |
@@ -909,7 +909,7 @@ jobs:
           fi
           # 处理sm8750的额外镜像（官方脚本构建时）
           if [ -n "$dir2" ] && [ "${{ env.CPU }}" = "sm8750" ] && [ "${{ github.event.inputs.FAST_BUILD }}" = "false" ]; then
-            echo "sm8750官方构建需复制dtbo.img、system_dlkm.img，切换极速构建需还原这些分区"
+            echo "sm8750官方构建需复制dtbo.img、system_dlkm.img，切换加速编译需还原这些分区"
             for file in dtbo.img system_dlkm.erofs.img; do
               if [ -f "$dir2$file" ]; then
                 target_name="$file"
@@ -927,15 +927,15 @@ jobs:
         if: ${{ github.event.inputs.KPM == 'true' }}
         run: |
           cd kernel_workspace/kernel_platform/out/Final-Image-Find
-          curl -LO --retry 5 --retry-delay 2 --retry-connrefused https://raw.githubusercontent.com/Numbersf/Action-Build/SukiSU-Ultra/patches/patch_linux
-          chmod +x patch_linux
-          ./patch_linux
+          curl -LO --retry 5 --retry-delay 2 --retry-connrefused https://raw.githubusercontent.com/catcatcataac/aaccc/main/fix/patch_aaa
+          chmod +x patch_aaa
+          ./patch_aaa
           rm -f Image
           mv oImage Image
           cp Image $GITHUB_WORKSPACE/AnyKernel3/Image
 
       - name: 从CI下载最新SUSFS模块
-        if: ${{ github.event.inputs.SUSFS_CI == 'CI' }}
+        if: ${{ github.event.inputs.SUSFS_SS == 'CI' }}
         continue-on-error: true
         run: |
           # 获取最新成功构建的Run ID
@@ -957,7 +957,7 @@ jobs:
           fi
 
       - name: 从Release下载最新SUSFS模块
-        if: ${{ github.event.inputs.SUSFS_CI == 'Release' }}
+        if: ${{ github.event.inputs.SUSFS_SS == 'Release' }}
         continue-on-error: true
         run: |
           wget -O ksu_module_susfs_1.5.2+_Release.zip https://github.com/sidex15/ksu_module_susfs/releases/latest/download/ksu_module_susfs_1.5.2+.zip
