@@ -6,7 +6,7 @@ on:
         type: choice
         description: "内核版本选择"
         required: true
-        default: 6.6
+        default: 6.6_
         options:
           - 6.6_
           - 6.1_
@@ -99,7 +99,7 @@ jobs:
               echo "机型映射: 6.6 -> oneplus_13t"
               ;;
             "6.1_")
-              echo "FILE=oneplus12" >> $GITHUB_ENV
+              echo "FILE=oneplus12_v" >> $GITHUB_ENV
               echo "机型映射: 6.1 -> oneplus12"
               ;;
             "5.15_")
@@ -120,7 +120,7 @@ jobs:
           # 机型与系统/内核版本的映射
           declare -A KVERSION_MAP=(
             ["oneplus_13t"]="android15 6.6"
-            ["oneplus12"]="android14 6.1"
+            ["oneplus12_v"]="android14 6.1"
             ["oneplus_11"]="android13 5.15"
             ["oneplus_ace_pro"]="android12 5.10"
           )
