@@ -8,10 +8,10 @@ on:
         required: true
         default: 6.6
         options:
-          - 6.6
-          - 6.1
-          - 5.15
-          - 5.10
+          - 6.6_
+          - 6.1_
+          - 5.15_
+          - 5.10_
       HOOK:
         type: choice
         description: "HOOK类型"
