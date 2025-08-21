@@ -103,12 +103,12 @@ jobs:
               echo "机型映射: 6.1 -> oneplus_ace5"
               ;;
             "5.15_")
-              echo "FILE=oneplus_11" >> $GITHUB_ENV
+              echo "FILE=oneplus_11_v" >> $GITHUB_ENV
               echo "机型映射: 5.15 -> oneplus_11"
               ;;
             "5.10_")
-              echo "FILE=oneplus_ace_pro" >> $GITHUB_ENV
-              echo "机型映射: 5.10 -> oneplus_ace_pro"
+              echo "FILE=oneplus_10_pro_v" >> $GITHUB_ENV
+              echo "机型映射: 5.10 -> oneplus_10_pro"
               ;;
           esac
 
@@ -121,8 +121,8 @@ jobs:
           declare -A KVERSION_MAP=(
             ["oneplus_13t"]="android15 6.6"
             ["oneplus_ace5"]="android14 6.1"
-            ["oneplus_11"]="android13 5.15"
-            ["oneplus_ace_pro"]="android12 5.10"
+            ["oneplus_11_v"]="android13 5.15"
+            ["oneplus_10_pro_v"]="android12 5.10"
           )
           FILE="${{ env.FILE }}"
           # 处理机型配置名
@@ -543,7 +543,7 @@ jobs:
           # 修复5.15旧版本C库兼容问题
           if [ "$GKI_V" == "android13-5.15" ] && [ "$SUBLEVEL" -lt 123 ]; then
             echo "修复5.15.0-5.15.123的旧版C库bug"
-            curl -Lo fix5.15Short.patch --retry 5 --retry-delay 2 --retry-connrefused https://raw.githubusercontent.com/catcatcataac/aaccc/main/fix/fix5.15Short
+            curl -Lo fix5.15Short.patch --retry 5 --retry-delay 2 --retry-connrefused https://raw.githubusercontent.com/catcatcataac/fix/main/fix5.15Short
             patch -p1 < fix5.15Short.patch
             echo "修复5.15完成"
           fi
@@ -582,7 +582,7 @@ jobs:
         run: |
           cd kernel_workspace/kernel_platform/common
           sed -i '1iobj-y += hmbird_patch.o' drivers/Makefile
-          wget https://github.com/catcatcataac/aaccc/raw/main/fix/hmbird_patch.patch
+          wget https://github.com/catcatcataac/fix/raw/main/hmbird_patch.patch
           echo "应用OGKI转GKI补丁"
           patch -p1 -F 3 < hmbird_patch.patch
           echo "OGKI转换GKI_patch完成"
@@ -927,7 +927,7 @@ jobs:
         if: ${{ github.event.inputs.KPM == 'true' }}
         run: |
           cd kernel_workspace/kernel_platform/out/Final-Image-Find
-          curl -LO --retry 5 --retry-delay 2 --retry-connrefused https://raw.githubusercontent.com/catcatcataac/aaccc/main/fix/patch_aaa
+          curl -LO --retry 5 --retry-delay 2 --retry-connrefused https://raw.githubusercontent.com/catcatcataac/fix/main/patch_aaa
           chmod +x patch_aaa
           ./patch_aaa
           rm -f Image
