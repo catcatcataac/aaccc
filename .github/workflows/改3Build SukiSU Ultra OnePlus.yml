@@ -103,12 +103,12 @@ jobs:
               echo "机型映射: 6.1 -> oneplus_ace5"
               ;;
             "5.15_")
-              echo "FILE=oneplus_11_v" >> $GITHUB_ENV
-              echo "机型映射: 5.15 -> oneplus_11"
+              echo "FILE=oneplus_ace3_v" >> $GITHUB_ENV
+              echo "机型映射: 5.15 -> oneplus_ace3"
               ;;
             "5.10_")
-              echo "FILE=oneplus_10_pro_v" >> $GITHUB_ENV
-              echo "机型映射: 5.10 -> oneplus_10_pro"
+              echo "FILE=oneplus_ace2_v" >> $GITHUB_ENV
+              echo "机型映射: 5.10 -> oneplus_ace2"
               ;;
           esac
 
@@ -121,8 +121,8 @@ jobs:
           declare -A KVERSION_MAP=(
             ["oneplus_13t"]="android15 6.6"
             ["oneplus_ace5"]="android14 6.1"
-            ["oneplus_11_v"]="android13 5.15"
-            ["oneplus_10_pro_v"]="android12 5.10"
+            ["oneplus_ace3_v"]="android13 5.15"
+            ["oneplus_ace2_v"]="android12 5.10"
           )
           FILE="${{ env.FILE }}"
           # 处理机型配置名
